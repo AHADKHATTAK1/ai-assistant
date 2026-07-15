@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local database and configuration (secrets)
+backend/data/orders.json
+backend/data/config.json
+.env
+
+# Antigravity agent directories
+.agents/
+.gemini/
+
+# OS Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BiteAI - Takeaway Voice Receptionist Dashboard</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <i class="fa-solid fa-microphone-lines pulse-icon"></i>
+        </div>
+        <div class="brand-text">
+          <h1>BiteAI</h1>
+          <span>Receptionist Pro</span>
+        </div>
+      </div>
+      
+      <nav class="nav-menu">
+        <a href="#" class="nav-item active" data-tab="dashboard">
+          <i class="fa-solid fa-chart-pie"></i> Live Monitor
+        </a>
+        <a href="#" class="nav-item" data-tab="orders">
+          <i class="fa-solid fa-receipt"></i> Orders Queue
+        </a>
+        <a href="#" class="nav-item" data-tab="menu">
+          <i class="fa-solid fa-utensils"></i> Menu Manager
+        </a>
+        <a href="#" class="nav-item" data-tab="settings">
+          <i class="fa-solid fa-gears"></i> AI & Connection
+        </a>
+      </nav>
+      
+      <div class="sidebar-status">
+        <div class="status-indicator connected" id="server-status">
+          <span class="dot"></span>
+          <span class="text">Connecting...</span>
+        </div>
+        <div class="takeaway-number">
+          <label>Forwarding From</label>
+          <span class="phone-link"><i class="fa-solid fa-phone"></i> 01274 502030</span>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top header bar -->
+      <header class="top-bar">
+        <div class="page-title">
+          <h2 id="tab-title">Live Monitor</h2>
+          <p id="tab-subtitle">Real-time phone calls and agent activity</p>
+        </div>
+        <div class="user-profile">
+          <div class="stats-badge">
+            <i class="fa-solid fa-bolt text-warning"></i>
+            <span id="header-total-orders">0 Orders today</span>
+          </div>
+          <button class="btn btn-accent btn-sm" id="test-call-simulator-btn">
+            <i class="fa-solid fa-play"></i> Simulate Call
+          </button>
+        </div>
+      </header>
+      
+      <!-- Content Tabs -->
+      <div class="tab-content" id="tab-dashboard">
+        
+        <!-- Live Call Alert Section (Shown when call is active) -->
+        <div id="active-call-container" class="active-call-banner hidden-element">
+          <div class="call-banner-header">
+            <div class="caller-meta">
+              <span class="badge badge-danger blink-animation">LIVE CALL</span>
+              <span class="caller-phone" id="call-phone-number"><i class="fa-solid fa-phone"></i> +44 7123 456789</span>
+              <span class="call-duration" id="call-duration-timer">00:00</span>
+            </div>
+            <div class="call-sentiment">
+              Sentiment: <span id="call-sentiment-badge" class="badge-sentiment neutral"><i class="fa-solid fa-face-meh"></i> Neutral</span>
+            </div>
+          </div>
+          
+          <div class="call-grid">
+            <!-- Left Side: Live Speech Bubble Transcript -->
+            <div class="transcript-panel">
+              <div class="panel-header">
+                <h3>Live Dialogue</h3>
+                <div class="language-detected">
+                  Language: <strong id="call-detected-lang">Detecting...</strong>
+                </div>
+              </div>
+              <div class="chat-bubbles" id="call-chat-history">
+                <!-- Dialogue dynamically loaded here -->
+                <div class="system-message">Waiting for caller to speak...</div>
+              </div>
+            </div>
+            
+            <!-- Right Side: Order Cart Preview -->
+            <div class="cart-panel">
+              <div class="panel-header">
+                <h3>Pending Receipt Cart</h3>
+                <span class="badge badge-accent" id="cart-item-count">0 items</span>
+              </div>
+              <div class="cart-items" id="call-cart-items">
+                <!-- Cart items load here -->
+                <div class="empty-cart-message">
+                  <i class="fa-solid fa-shopping-basket"></i>
+                  <p>Cart is currently empty. List items as the customer orders them.</p>
+                </div>
+              </div>
+              <div class="cart-totals">
+                <div class="total-row">
+                  <span>Subtotal</span>
+                  <span id="cart-subtotal">£0.00</span>
+                </div>
+                <div class="total-row">
+                  <span>Delivery Fee</span>
+                  <span id="cart-delivery-fee">£0.00</span>
+                </div>
+                <div class="total-row grand-total">
+                  <span>Total</span>
+                  <span id="cart-total">£0.00</span>
+                </div>
+              </div>
+              <div class="customer-details-box" id="cart-customer-details">
+                <h4><i class="fa-solid fa-user-tag"></i> Delivery & Contact Details</h4>
+                <p><strong>Type:</strong> <span id="cart-cust-type">-</span></p>
+                <p><strong>Name:</strong> <span id="cart-cust-name">-</span></p>
+                <p><strong>Address:</strong> <span id="cart-cust-address">-</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Live Call Inactive Message -->
+        <div id="no-call-container" class="no-call-banner">
+          <div class="no-call-content">
+            <div class="pulsing-radar">
+              <div class="ring"></div>
+              <div class="ring"></div>
+              <div class="ring"></div>
+              <i class="fa-solid fa-phone"></i>
+            </div>
+            <h3>Waiting for Incoming Phone Calls</h3>
+            <p>Your AI Agent BiteAI is online and ready. Dial 01274 502030 or trigger call forwarding to redirect incoming calls here.</p>
+            <div class="quick-stats">
+              <div class="quick-stat-card">
+                <div class="stat-value" id="stats-total-today">£0.00</div>
+                <div class="stat-label">Sales Today</div>
+              </div>
+              <div class="quick-stat-card">
+                <div class="stat-value" id="stats-count-today">0</div>
+                <div class="stat-label">Orders Today</div>
+              </div>
+              <div class="quick-stat-card">
+                <div class="stat-value" id="stats-avg-duration">0s</div>
+                <div class="stat-label">Avg. Call Duration</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Insights / Charts Section -->
+        <div class="dashboard-charts-grid">
+          <div class="chart-card">
+            <h3>Hourly Order Traffic</h3>
+            <div class="chart-container">
+              <canvas id="traffic-chart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Customer Sentiment Distribution</h3>
+            <div class="chart-container">
+              <canvas id="sentiment-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Content Tabs: Orders Queue -->
+      <div class="tab-content hidden-element" id="tab-orders">
+        <div class="orders-filters">
+          <div class="filter-group">
+            <button class="btn btn-filter active" data-filter="all">All Orders</button>
+            <button class="btn btn-filter" data-filter="Received">Received</button>
+            <button class="btn btn-filter" data-filter="Preparing">Preparing</button>
+            <button class="btn btn-filter" data-filter="Ready">Ready</button>
+            <button class="btn btn-filter" data-filter="Completed">Completed</button>
+          </div>
+          <div class="auto-print-badge-container">
+            <label class="toggle-switch">
+              <input type="checkbox" id="orders-auto-print-toggle" checked>
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label"><i class="fa-solid fa-print"></i> Auto-Print Receipts</span>
+          </div>
+        </div>
+        
+        <div class="orders-list-grid" id="orders-list-container">
+          <!-- Orders loaded dynamically -->
+        </div>
+      </div>
+      
+      <!-- Content Tabs: Menu Manager -->
+      <div class="tab-content hidden-element" id="tab-menu">
+        <div class="menu-control-bar">
+          <h3>Takeaway Menu Catalog</h3>
+          <button class="btn btn-accent" id="menu-add-item-btn">
+            <i class="fa-solid fa-plus"></i> Add Menu Item
+          </button>
+        </div>
+        
+        <div class="menu-editor-grid">
+          <div class="menu-table-container">
+            <table class="menu-table">
+              <thead>
+                <tr>
+                  <th>Item Name</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Description</th>
+                  <th>Availability</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="menu-items-table-body">
+                <!-- Loaded dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Content Tabs: Settings -->
+      <div class="tab-content hidden-element" id="tab-settings">
+        <div class="settings-grid">
+          <!-- Left Column: AI Config -->
+          <div class="settings-card">
+            <h3><i class="fa-solid fa-robot"></i> AI Conversational Settings</h3>
+            <form id="settings-ai-form">
+              <div class="form-group">
+                <label for="settings-gemini-key">Gemini API Key</label>
+                <div class="input-password-wrapper">
+                  <input type="password" id="settings-gemini-key" placeholder="Enter Gemini API Key (API_KEY_...)">
+                  <button type="button" class="btn-toggle-visibility" onclick="togglePasswordVisibility('settings-gemini-key')">
+                    <i class="fa-solid fa-eye"></i>
+                  </button>
+                </div>
+                <small class="form-help">Required to run speech comprehension, natural conversation, and translation.</small>
+              </div>
+              <div class="form-group">
+                <label for="settings-prompt">AI Voice System Prompt</label>
+                <textarea id="settings-prompt" rows="8"></textarea>
+                <small class="form-help">Customize greeting, tone, restaurant instructions, and how BiteAI behaves during calls.</small>
+              </div>
+              <button type="submit" class="btn btn-accent">Save AI Settings</button>
+            </form>
+          </div>
+          
+          <!-- Right Column: Business & Twilio Integration -->
+          <div class="settings-card">
+            <h3><i class="fa-solid fa-network-wired"></i> Connection & Telephony Setup</h3>
+            <form id="settings-business-form">
+              <div class="form-group">
+                <label for="settings-biz-name">Takeaway Business Name</label>
+                <input type="text" id="settings-biz-name">
+              </div>
+              <div class="form-group">
+                <label for="settings-biz-phone">Takeaway Phone Line</label>
+                <input type="text" id="settings-biz-phone">
+              </div>
+              <div class="form-group">
+                <label for="settings-biz-address">Business Address</label>
+                <input type="text" id="settings-biz-address">
+              </div>
+              <hr class="form-divider">
+              <h4>Twilio Voice Configuration</h4>
+              <div class="form-group">
+                <label for="settings-twilio-sid">Twilio Account SID</label>
+                <input type="text" id="settings-twilio-sid">
+              </div>
+              <div class="form-group">
+                <label for="settings-twilio-token">Twilio Auth Token</label>
+                <input type="password" id="settings-twilio-token">
+              </div>
+              <button type="submit" class="btn btn-primary">Save Business Details</button>
+            </form>
+            
+            <div class="call-forwarding-tutorial mt-4">
+              <h4><i class="fa-solid fa-circle-question"></i> Connecting 01274 502030</h4>
+              <p>To wire up your takeaway telephone number to BiteAI:</p>
+              <ol>
+                <li>Get a virtual phone number from Twilio.</li>
+                <li>Go to the Twilio Console, and set the Voice Webhook of that number to:<br>
+                  <code class="code-block" id="twilio-webhook-copy-url">http://&lt;your-server-ip&gt;/voice/incoming</code>
+                </li>
+                <li>On your landline phone (01274 502030), dial call forwarding commands (e.g. <code>*21*&lt;TwilioNumber&gt;#</code>) so all calls bypass the ringing phone and are answered directly by BiteAI!</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+    </main>
+  </div>
+  
+  <!-- Add Item Modal -->
+  <div class="modal hidden-element" id="menu-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="menu-modal-title">Add Menu Item</h3>
+        <button class="modal-close-btn" id="menu-modal-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="menu-item-form">
+        <input type="hidden" id="menu-item-id">
+        <div class="form-group">
+          <label for="menu-item-name">Item Name</label>
+          <input type="text" id="menu-item-name" required placeholder="e.g. Garlic Pizza Bread">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="menu-item-price">Price (£)</label>
+            <input type="number" id="menu-item-price" step="0.01" required placeholder="e.g. 4.99">
+          </div>
+          <div class="form-group">
+            <label for="menu-item-category">Category</label>
+            <select id="menu-item-category">
+              <option value="Pizzas">Pizzas</option>
+              <option value="Kebabs">Kebabs</option>
+              <option value="Burgers">Burgers</option>
+              <option value="Sides">Sides</option>
+              <option value="Drinks">Drinks</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="menu-item-description">Description</label>
+          <textarea id="menu-item-description" rows="3" placeholder="Description of ingredients/portions..."></textarea>
+        </div>
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="menu-item-available" checked>
+          <label for="menu-item-available">Available for ordering</label>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="menu-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-accent">Save Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Hidden/Print-friendly thermal receipt template -->
+  <div id="receipt-print-section" class="print-receipt-sheet">
+    <div class="receipt-header">
+      <h2 id="print-biz-name">Umair's Takeaway</h2>
+      <p id="print-biz-address">Bradford, West Yorkshire</p>
+      <p id="print-biz-phone">Phone: 01274 502030</p>
+      <div class="double-line"></div>
+      <h3>ORDER RECEIPT</h3>
+      <div class="double-line"></div>
+    </div>
+    <div class="receipt-meta">
+      <p>Order ID: <span id="print-order-id">#12345</span></p>
+      <p>Date: <span id="print-order-time">2026-07-15 15:00:00</span></p>
+      <p>Customer: <span id="print-cust-name-receipt">John Doe</span></p>
+      <p>Phone: <span id="print-cust-phone">07123456789</span></p>
+      <p>Type: <strong id="print-order-type">DELIVERY</strong></p>
+      <div class="dashed-line"></div>
+      <div id="print-address-section" class="hidden-element">
+        <p><strong>Delivery Address:</strong></p>
+        <p id="print-cust-address-receipt" class="address-text">123 Street Road, Bradford</p>
+        <div class="dashed-line"></div>
+      </div>
+    </div>
+    <table class="receipt-items-table">
+      <thead>
+        <tr>
+          <th>QTY</th>
+          <th>ITEM</th>
+          <th>PRICE</th>
+        </tr>
+      </thead>
+      <tbody id="print-items-body">
+        <!-- Receipt items -->
+      </tbody>
+    </table>
+    <div class="dashed-line"></div>
+    <div class="receipt-totals">
+      <div class="receipt-total-row">
+        <span>Subtotal:</span>
+        <span id="print-subtotal">£0.00</span>
+      </div>
+      <div class="receipt-total-row">
+        <span>Delivery Fee:</span>
+        <span id="print-delivery-fee">£0.00</span>
+      </div>
+      <div class="receipt-total-row grand-total">
+        <span>GRAND TOTAL:</span>
+        <span id="print-total">£0.00</span>
+      </div>
+    </div>
+    <div class="double-line"></div>
+    <div class="receipt-footer">
+      <p>Thank you for ordering with BiteAI!</p>
+      <p>Order processed automatically by Gemini AI</p>
+      <div class="barcode">*01274502030*</div>
+    </div>
+  </div>
+
+  <!-- Audio elements for simulator -->
+  <audio id="sim-ring-audio" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-84.wav" loop></audio>
+  <audio id="sim-beep-audio" src="https://assets.mixkit.co/active_storage/sfx/911/911-84.wav"></audio>
+
+  <!-- Main JavaScript App Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "name": "Margherita Pizza",
+    "price": 8.99,
+    "category": "Pizzas",
+    "description": "Classic tomato mozzarella cheese & oregano",
+    "available": true
+  },
+  {
+    "id": 2,
+    "name": "Pepperoni Feast Pizza",
+    "price": 10.99,
+    "category": "Pizzas",
+    "description": "Double pepperoni with extra mozzarella cheese",
+    "available": true
+  },
+  {
+    "id": 3,
+    "name": "Doner Kebab",
+    "price": 7.50,
+    "category": "Kebabs",
+    "description": "Minced lamb seasoned and cooked on a spit, served with salad & sauce",
+    "available": true
+  },
+  {
+    "id": 4,
+    "name": "Chicken Tikka Kebab",
+    "price": 8.50,
+    "category": "Kebabs",
+    "description": "Spiced chicken cubes grilled on skewers, served with salad & sauce",
+    "available": true
+  },
+  {
+    "id": 5,
+    "name": "Cheeseburger",
+    "price": 5.99,
+    "category": "Burgers",
+    "description": "Flame-grilled beef patty with cheese, salad & burger sauce",
+    "available": true
+  },
+  {
+    "id": 6,
+    "name": "French Fries",
+    "price": 2.99,
+    "category": "Sides",
+    "description": "Crispy golden potato fries",
+    "available": true
+  },
+  {
+    "id": 7,
+    "name": "Garlic Bread with Cheese",
+    "price": 4.50,
+    "category": "Sides",
+    "description": "Baked garlic bread topped with melted cheese",
+    "available": true
+  },
+  {
+    "id": 8,
+    "name": "Coca-Cola Can",
+    "price": 1.50,
+    "category": "Drinks",
+    "description": "330ml chilled can",
+    "available": true
+  },
+  {
+    "id": 9,
+    "name": "Fanta Orange Can",
+    "price": 1.50,
+    "category": "Drinks",
+    "description": "330ml chilled can",
+    "available": true
+  }
+]
