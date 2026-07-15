@@ -763,6 +763,11 @@ function setupEventListeners() {
       simulateSpeechPrompt(mockSid);
     });
   });
+
+  // Talk with Mic (No Twilio) Button
+  document.getElementById("start-mic-agent-btn").addEventListener("click", () => {
+    startBrowserMicAgent();
+  });
 }
 
 // Simulation Dialogue loop
