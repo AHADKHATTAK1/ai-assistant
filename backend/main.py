@@ -237,6 +237,10 @@ async def incoming_call(request: Request):
     
     logger.info(f"Incoming call from: {caller_phone} (Sid: {call_sid})")
     
+    # Load default language from config
+    config = read_json_file(CONFIG_FILE, {})
+    default_lang = config.get("default_language", "en-GB")
+    
     # Initialize active call state
     active_calls[call_sid] = {
         "sid": call_sid,
@@ -244,7 +248,7 @@ async def incoming_call(request: Request):
         "chat_history": [],
         "cart": [],
         "customer_info": {"name": "", "address": "", "phone": caller_phone, "type": ""},
-        "language": "en-GB",
+        "language": default_lang,
         "status": "active",
         "sentiment": "neutral"
     }
@@ -258,15 +262,15 @@ async def incoming_call(request: Request):
     
     # Respond to Twilio
     response = VoiceResponse()
-    response.say("Welcome to Umair's Takeaway. How can I help you today?", voice="Polly.Amy", language="en-GB")
+    response.say("Welcome to Umair's Takeaway. How can I help you today?", voice="Polly.Amy", language=default_lang)
     
-    # Start gathering speech input
-    # Set speechTimeout to auto, gatherTimeout to 3 seconds of silence
+    # Start gathering speech input using default language
     gather = Gather(
         input="speech",
         action="/voice/respond",
         timeout=3,
         speechTimeout="auto",
+        language=default_lang,
         enhanced=True
     )
     response.append(gather)
@@ -275,6 +279,7 @@ async def incoming_call(request: Request):
     response.redirect("/voice/incoming")
     
     return Response(content=str(response), media_type="application/xml")
+
 
 @app.post("/voice/respond")
 async def respond_call(request: Request):
@@ -285,20 +290,22 @@ async def respond_call(request: Request):
     
     logger.info(f"Call {call_sid} speech result: '{speech_result}'")
     
-    if not speech_result:
-        # Customer didn't say anything, ask again
-        response = VoiceResponse()
-        response.say("I didn't catch that. Could you repeat it?", voice="Polly.Amy", language="en-GB")
-        response.append(Gather(input="speech", action="/voice/respond", timeout=3, speechTimeout="auto"))
-        return Response(content=str(response), media_type="application/xml")
-    
-    # Fetch call state
+    # Fetch call state early
     call_state = active_calls.get(call_sid)
     if not call_state:
         # If session timed out or server restarted
         response = VoiceResponse()
         response.say("I am sorry, our systems are restarting. Please call us again.", voice="Polly.Amy", language="en-GB")
         response.hangup()
+        return Response(content=str(response), media_type="application/xml")
+        
+    current_lang = call_state.get("language", "en-GB")
+    
+    if not speech_result:
+        # Customer didn't say anything, ask again
+        response = VoiceResponse()
+        response.say("I didn't catch that. Could you repeat it?", voice="Polly.Amy", language=current_lang)
+        response.append(Gather(input="speech", action="/voice/respond", timeout=3, speechTimeout="auto", language=current_lang))
         return Response(content=str(response), media_type="application/xml")
     
     # Run through Gemini
@@ -351,15 +358,17 @@ async def respond_call(request: Request):
         if call_sid in active_calls:
             del active_calls[call_sid]
     else:
-        # Continue gathering speech
+        # Continue gathering speech using the newly detected language
         gather = Gather(
             input="speech",
             action="/voice/respond",
             timeout=3,
             speechTimeout="auto",
+            language=lang_code,
             enhanced=True
         )
         response.append(gather)
+
     
     return Response(content=str(response), media_type="application/xml")
 

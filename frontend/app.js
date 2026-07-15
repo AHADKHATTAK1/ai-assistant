@@ -1,8 +1,11 @@
 // BiteAI Dashboard Client App
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const serverHost = window.location.host || 'localhost:5000';
-const wsUrl = `${wsProtocol}//${serverHost}/ws`;
-const apiUrl = `${window.location.protocol}//${serverHost}/api`;
+const defaultHost = 'localhost:5002';
+const serverHost = window.location.host && window.location.protocol !== 'file:' ? window.location.host : defaultHost;
+const wsUrl = (window.location.protocol === 'file:' ? 'ws:' : wsProtocol) + '//' + serverHost + '/ws';
+const httpProtocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+const apiUrl = httpProtocol + '//' + serverHost + '/api';
+
 
 // State variables
 let menu = [];
