@@ -168,35 +168,50 @@ Format your response as a valid JSON object with the following fields:
         return get_mock_ai_response(call_sid, user_transcript, menu)
 
 def get_mock_ai_response(call_sid: str, user_transcript: str, menu: list) -> dict:
-    """Fallback mock AI responses if API key is not configured or fails"""
+    """Fallback mock AI responses if API key is not configured or fails, supporting multi-language demo flows without Twilio/Gemini API keys"""
     text = user_transcript.lower()
     call_state = active_calls.setdefault(call_sid, {
         "cart": [],
         "customer_info": {"name": "", "address": "", "phone": "", "type": ""}
     })
     
-    response_text = "I am sorry, my system is currently in setup mode. Can you repeat that?"
-    is_completed = False
+    # Simple language detection
+    lang_code = "en-GB"
+    # Urdu/Hindi/Roman Urdu keywords
+    urdu_keywords = ["chahye", "chahiye", "do", "karo", "kardo", "naam", "pata", "address", "delivery", "dilivery", "ghar", "lekar", "aao", "shukriya", "ha", "haan", "nahin", "nahi", "mukammal", "confirm", "khuda", "hafiz"]
+    # Spanish keywords
+    spanish_keywords = ["hola", "quiero", "por favor", "nombre", "direccion", "llevar", "domicilio", "gracias", "si", "no", "confirmar", "adios"]
     
-    # Basic keyword matching to simulate order taking
+    # Check if text matches language hints
+    is_urdu = any(kw in text for kw in urdu_keywords)
+    is_spanish = any(kw in text for kw in spanish_keywords)
+    
+    if is_urdu:
+        lang_code = "ur-PK"
+    elif is_spanish:
+        lang_code = "es-ES"
+    
+    is_completed = False
     matched_items = []
+    
+    # Match menu items (English name check)
     for item in menu:
         if item["name"].lower() in text:
             qty = 1
-            if "two" in text or "2" in text:
+            if "two" in text or "2" in text or "do " in text or "dos" in text:
                 qty = 2
-            elif "three" in text or "3" in text:
+            elif "three" in text or "3" in text or "teen" in text or "tres" in text:
                 qty = 3
             
             # Check if item already in cart
             found = False
-            for cart_item in call_state["cart"]:
+            for cart_item in call_state.get("cart", []):
                 if cart_item["id"] == item["id"]:
                     cart_item["qty"] += qty
                     found = True
                     break
             if not found:
-                call_state["cart"].append({
+                call_state.setdefault("cart", []).append({
                     "id": item["id"],
                     "name": item["name"],
                     "price": item["price"],
@@ -204,24 +219,56 @@ def get_mock_ai_response(call_sid: str, user_transcript: str, menu: list) -> dic
                 })
             matched_items.append(f"{qty}x {item['name']}")
 
-    if matched_items:
-        response_text = f"Added {', '.join(matched_items)} to your order. Would you like anything else, or is that for collection or delivery?"
-    elif "delivery" in text:
-        call_state["customer_info"]["type"] = "delivery"
-        response_text = "Delivery. Perfect. What is your name and delivery address, please?"
-    elif "collection" in text or "collect" in text:
-        call_state["customer_info"]["type"] = "collection"
-        response_text = "Collection. Perfect. What is your name, please?"
-    elif len(call_state["cart"]) > 0 and ("complete" in text or "yes" in text or "that is all" in text or "thank you" in text or "confirm" in text):
-        is_completed = True
-        response_text = "Thank you! Your order is confirmed and will be ready soon. Goodbye!"
-    else:
-        response_text = "Welcome to Umair's Takeaway. What can I get for you today?"
+    # Formulate response based on detected language
+    if lang_code == "ur-PK":
+        if matched_items:
+            response_text = f"Aap ke order mein {', '.join(matched_items)} add kar diya hai. Kuch aur chahiye, ya aap khud collect karenge ya delivery chahiye?"
+        elif "delivery" in text or "ghar" in text or "bhejo" in text:
+            call_state["customer_info"]["type"] = "delivery"
+            response_text = "Delivery ke liye. Perfect. Aapka naam aur delivery ka address kya hai?"
+        elif "collect" in text or "lekar" in text or "khud" in text:
+            call_state["customer_info"]["type"] = "collection"
+            response_text = "Collection ke liye. Perfect. Aapka naam kya hai?"
+        elif len(call_state.get("cart", [])) > 0 and ("complete" in text or "yes" in text or "haan" in text or "confirm" in text or "ho gaya" in text or "shukriya" in text):
+            is_completed = True
+            response_text = "Shukriya! Aapka order confirm ho gaya hai aur jald hi tayar ho jayega. Khuda Hafiz!"
+        else:
+            response_text = "Umair's Takeaway mein khush aamdeed! Main aap ke liye kya lekar aaoon?"
+            
+    elif lang_code == "es-ES":
+        if matched_items:
+            response_text = f"He añadido {', '.join(matched_items)} a su pedido. ¿Desea algo más, o es para llevar o domicilio?"
+        elif "domicilio" in text or "delivery" in text or "enviar" in text:
+            call_state["customer_info"]["type"] = "delivery"
+            response_text = "Para domicilio. Perfecto. ¿Cuál es su nombre y dirección de entrega, por favor?"
+        elif "llevar" in text or "recoger" in text:
+            call_state["customer_info"]["type"] = "collection"
+            response_text = "Para llevar. Perfecto. ¿Cuál es su nombre, por favor?"
+        elif len(call_state.get("cart", [])) > 0 and ("complete" in text or "si" in text or "confirmar" in text or "gracias" in text):
+            is_completed = True
+            response_text = "¡Gracias! Su pedido está confirmado y estará listo pronto. ¡Adiós!"
+        else:
+            response_text = "¡Bienvenido a Umair's Takeaway! ¿Qué le puedo ofrecer hoy?"
+            
+    else: # English default
+        if matched_items:
+            response_text = f"Added {', '.join(matched_items)} to your order. Would you like anything else, or is that for collection or delivery?"
+        elif "delivery" in text:
+            call_state["customer_info"]["type"] = "delivery"
+            response_text = "Delivery. Perfect. What is your name and delivery address, please?"
+        elif "collection" in text or "collect" in text:
+            call_state["customer_info"]["type"] = "collection"
+            response_text = "Collection. Perfect. What is your name, please?"
+        elif len(call_state.get("cart", [])) > 0 and ("complete" in text or "yes" in text or "that is all" in text or "thank you" in text or "confirm" in text):
+            is_completed = True
+            response_text = "Thank you! Your order is confirmed and will be ready soon. Goodbye!"
+        else:
+            response_text = "Welcome to Umair's Takeaway. What can I get for you today?"
 
     return {
         "ai_response": response_text,
-        "detected_language_code": "en-GB",
-        "cart_updated": call_state["cart"],
+        "detected_language_code": lang_code,
+        "cart_updated": call_state.get("cart", []),
         "delivery_info": call_state["customer_info"],
         "sentiment": "neutral",
         "is_completed": is_completed
