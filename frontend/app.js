@@ -27,13 +27,13 @@ let systemConfig = {
 
 // Initialize Application
 document.addEventListener("DOMContentLoaded", () => {
-  setupTabs();
-  loadConfig();
-  loadMenu();
-  loadOrders();
-  connectWebSocket();
-  setupEventListeners();
-  initCharts();
+  try { setupTabs(); } catch(e) { console.error("Error setting up tabs:", e); }
+  try { loadConfig(); } catch(e) { console.error("Error loading config:", e); }
+  try { loadMenu(); } catch(e) { console.error("Error loading menu:", e); }
+  try { loadOrders(); } catch(e) { console.error("Error loading orders:", e); }
+  try { connectWebSocket(); } catch(e) { console.error("Error connecting websocket:", e); }
+  try { setupEventListeners(); } catch(e) { console.error("Error setting up event listeners:", e); }
+  try { initCharts(); } catch(e) { console.error("Error initializing charts:", e); }
 });
 
 // Setup sidebar tabs routing
@@ -128,31 +128,38 @@ async function loadOrders() {
 
 // Setup WebSocket Listener for Real-Time Call Events
 function connectWebSocket() {
-  ws = new WebSocket(wsUrl);
-  
   const statusIndicator = document.getElementById("server-status");
-  
-  ws.onopen = () => {
-    statusIndicator.className = "status-indicator connected";
-    statusIndicator.querySelector(".text").innerText = "Server Connected";
-    console.log("WS connection established");
-  };
-  
-  ws.onclose = () => {
-    statusIndicator.className = "status-indicator disconnected";
-    statusIndicator.querySelector(".text").innerText = "Server Disconnected";
-    console.log("WS connection closed. Reconnecting in 5s...");
-    setTimeout(connectWebSocket, 5000);
-  };
-  
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      handleWebSocketMessage(msg);
-    } catch (e) {
-      console.error("Failed to parse WS message:", e);
+  try {
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      statusIndicator.className = "status-indicator connected";
+      statusIndicator.querySelector(".text").innerText = "Server Connected";
+      console.log("WS connection established");
+    };
+    
+    ws.onclose = () => {
+      statusIndicator.className = "status-indicator disconnected";
+      statusIndicator.querySelector(".text").innerText = "Server Disconnected";
+      console.log("WS connection closed. Reconnecting in 5s...");
+      setTimeout(connectWebSocket, 5000);
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleWebSocketMessage(msg);
+      } catch (e) {
+        console.error("Failed to parse WS message:", e);
+      }
+    };
+  } catch (err) {
+    console.warn("WebSocket connection failed. Falling back to HTTP polling:", err);
+    if (statusIndicator) {
+      statusIndicator.className = "status-indicator disconnected";
+      statusIndicator.querySelector(".text").innerText = "Server Disconnected (Polling)";
     }
-  };
+  }
 }
 
 // Route incoming websocket events
