@@ -1,6 +1,6 @@
 // BiteAI Dashboard Client App
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const defaultHost = 'localhost:5004';
+const defaultHost = 'localhost:5005';
 const serverHost = window.location.host && window.location.protocol !== 'file:' ? window.location.host : defaultHost;
 const wsUrl = (window.location.protocol === 'file:' ? 'ws:' : wsProtocol) + '//' + serverHost + '/ws';
 const httpProtocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
@@ -877,3 +877,107 @@ function togglePasswordVisibility(fieldId) {
     el.type = "password";
   }
 }
+
+// Fallback HTTP polling for Serverless environments (like Vercel) where WebSockets are unsupported
+let isPollingActive = false;
+setInterval(async () => {
+  if (isPollingActive) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    isPollingActive = true;
+    try {
+      // Poll active calls
+      const activeResponse = await fetch(`${apiUrl}/active-calls`);
+      if (activeResponse.ok) {
+        const activeCallsData = await activeResponse.json();
+        const callSids = Object.keys(activeCallsData);
+        
+        if (callSids.length > 0) {
+          const firstCallSid = callSids[0];
+          const callData = activeCallsData[firstCallSid];
+          
+          if (!activeCall) {
+            // Start call
+            activeCall = {
+              sid: firstCallSid,
+              phone: callData.phone,
+              chat_history: callData.chat_history,
+              cart: callData.cart,
+              customer_info: callData.customer_info,
+              sentiment: callData.sentiment,
+              language: callData.language
+            };
+            document.getElementById("no-call-container").classList.add("hidden-element");
+            document.getElementById("active-call-container").classList.remove("hidden-element");
+            document.getElementById("call-phone-number").innerHTML = `<i class="fa-solid fa-phone"></i> ${callData.phone}`;
+            startCallTimer();
+          }
+          
+          // Check if chat history length changed before re-rendering to prevent cursor/flicker
+          const chatHistoryChanged = !activeCall.chat_history || activeCall.chat_history.length !== callData.chat_history.length;
+          activeCall.chat_history = callData.chat_history;
+          activeCall.cart = callData.cart;
+          activeCall.customer_info = callData.customer_info;
+          activeCall.sentiment = callData.sentiment;
+          activeCall.language = callData.language;
+          
+          if (chatHistoryChanged) {
+            const chatHistoryContainer = document.getElementById("call-chat-history");
+            chatHistoryContainer.innerHTML = "";
+            activeCall.chat_history.forEach(turn => {
+              const userBubble = document.createElement("div");
+              userBubble.className = "bubble bubble-user";
+              userBubble.innerHTML = `<span class="speaker-tag">Customer</span> ${turn.user}`;
+              chatHistoryContainer.appendChild(userBubble);
+              
+              const aiBubble = document.createElement("div");
+              aiBubble.className = "bubble bubble-ai";
+              aiBubble.innerHTML = `<span class="speaker-tag">AI Agent</span> ${turn.ai}`;
+              chatHistoryContainer.appendChild(aiBubble);
+            });
+            chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+          }
+          
+          // Render cart & update headers
+          renderActiveCart();
+          
+          const sentimentBadge = document.getElementById("call-sentiment-badge");
+          sentimentBadge.className = `badge-sentiment ${activeCall.sentiment}`;
+          let emoji = "meh";
+          if (activeCall.sentiment === "happy") emoji = "smile";
+          else if (activeCall.sentiment === "impatient") emoji = "hourglass-half";
+          else if (activeCall.sentiment === "frustrated") emoji = "angry";
+          sentimentBadge.innerHTML = `<i class="fa-solid fa-${emoji}"></i> ${capitalizeFirstLetter(activeCall.sentiment)}`;
+          
+          document.getElementById("call-detected-lang").innerText = activeCall.language;
+          
+        } else {
+          // No active calls on backend
+          if (activeCall) {
+            const finishedSid = activeCall.sid;
+            // Fetch orders to see if the call was completed as an order
+            const ordersResponse = await fetch(`${apiUrl}/orders`);
+            if (ordersResponse.ok) {
+              const latestOrders = await ordersResponse.json();
+              const matchingOrder = latestOrders.find(o => o.id === finishedSid);
+              if (matchingOrder) {
+                orders = latestOrders;
+                completeActiveCall(matchingOrder);
+              } else {
+                // Hung up without completing order
+                activeCall = null;
+                stopCallTimer();
+                document.getElementById("active-call-container").classList.add("hidden-element");
+                document.getElementById("no-call-container").classList.remove("hidden-element");
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Polling fallback error:", e);
+    } finally {
+      isPollingActive = false;
+    }
+  }
+}, 3000);
+

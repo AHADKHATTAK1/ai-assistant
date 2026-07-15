@@ -479,6 +479,22 @@ async def update_order_status(payload: dict):
     await ws_manager.broadcast({"type": "order_status_updated", "id": order_id, "status": status})
     return {"status": "success"}
 
+@app.get("/api/active-calls")
+def get_active_calls():
+    return {
+        call_sid: {
+            "sid": state.get("sid"),
+            "phone": state.get("phone"),
+            "chat_history": state.get("chat_history", []),
+            "cart": state.get("cart", []),
+            "customer_info": state.get("customer_info", {}),
+            "language": state.get("language", "en-GB"),
+            "sentiment": state.get("sentiment", "neutral"),
+            "status": state.get("status", "active")
+        }
+        for call_sid, state in active_calls.items()
+    }
+
 @app.get("/api/config")
 def get_config():
     return read_json_file(CONFIG_FILE, {})
