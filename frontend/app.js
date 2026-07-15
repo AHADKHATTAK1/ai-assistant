@@ -740,7 +740,7 @@ function setupEventListeners() {
     const mockFrom = "+44 " + Math.floor(1000000000 + Math.random() * 9000000000);
     
     // Send mock event to backend via fetch to simulate an incoming call
-    fetch(`${window.location.protocol}//${serverHost}/voice/incoming`, {
+    fetch(`${httpProtocol}//${serverHost}/voice/incoming`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `CallSid=${mockSid}&From=${encodeURIComponent(mockFrom)}`
@@ -757,7 +757,7 @@ function simulateSpeechPrompt(sid) {
     if (!activeCall) return;
     const speech = prompt("Customer speech (type what the customer says to BiteAI):\ne.g. 'I want a Margherita Pizza and a Cheeseburger, for collection please. My name is John.'");
     if (speech) {
-      fetch(`${window.location.protocol}//${serverHost}/voice/respond`, {
+      fetch(`${httpProtocol}//${serverHost}/voice/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(speech)}`
