@@ -1,6 +1,6 @@
 // BiteAI Dashboard Client App
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const defaultHost = 'localhost:5005';
+const defaultHost = 'localhost:5006';
 const serverHost = window.location.host && window.location.protocol !== 'file:' ? window.location.host : defaultHost;
 const wsUrl = (window.location.protocol === 'file:' ? 'ws:' : wsProtocol) + '//' + serverHost + '/ws';
 const httpProtocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
@@ -218,7 +218,11 @@ function startActiveCall(sid, phone) {
   if (beep) beep.play().catch(e => console.log("Audio block: " + e));
   
   // Speak initial greeting
-  speakTextInBrowser("Welcome to Umair's Takeaway. How can I help you today?", "en-GB");
+  speakTextInBrowser("Welcome to Umair's Takeaway. How can I help you today?", "en-GB", () => {
+    if (activeCall && activeCall.sid.startsWith("mic_")) {
+      runMicLoop(activeCall.sid);
+    }
+  });
 }
 
 // Handle real-time call updates (speech speech, AI answers, cart, sentiment)
@@ -249,7 +253,11 @@ function updateActiveCall(msg) {
     chatHistory.scrollTop = chatHistory.scrollHeight;
     
     // Speak AI response aloud in browser
-    speakTextInBrowser(msg.transcript.ai, msg.language);
+    speakTextInBrowser(msg.transcript.ai, msg.language, () => {
+      if (activeCall && activeCall.sid.startsWith("mic_")) {
+        runMicLoop(activeCall.sid);
+      }
+    });
   }, 500);
   
   // Update Cart details
@@ -987,18 +995,16 @@ setInterval(async () => {
 }, 3000);
 
 // Web Speech API Voice Synthesis for Call Simulation
-function speakTextInBrowser(text, langCode) {
+function speakTextInBrowser(text, langCode, onEndCallback) {
   if (!window.speechSynthesis) {
     console.warn("Speech synthesis not supported in this browser.");
     return;
   }
   
-  // Cancel active speech
   window.speechSynthesis.cancel();
   
   const utterance = new SpeechSynthesisUtterance(text);
   
-  // Clean up BCP-47 tag
   let cleanLang = langCode || 'en-GB';
   if (cleanLang.includes('-')) {
     const parts = cleanLang.split('-');
@@ -1006,19 +1012,121 @@ function speakTextInBrowser(text, langCode) {
   }
   utterance.lang = cleanLang;
   
-  // Fetch available voices
   const voices = window.speechSynthesis.getVoices();
-  
-  // Match matching language prefix
   const matchingVoice = voices.find(v => v.lang.startsWith(cleanLang.substring(0, 2)));
   if (matchingVoice) {
     utterance.voice = matchingVoice;
   }
   
-  // Fallback speed adjustment if needed
   utterance.rate = 1.0;
   
+  if (onEndCallback) {
+    utterance.onend = onEndCallback;
+  }
+  
   window.speechSynthesis.speak(utterance);
+}
+
+// Browser Microphone Voice Agent (No Twilio)
+let micSpeechRecognition = null;
+let isMicListening = false;
+
+function startBrowserMicAgent() {
+  if (activeCall) {
+    alert("An active call is already running!");
+    return;
+  }
+  
+  const mockSid = "mic_" + Math.random().toString(36).substring(2, 10);
+  const mockFrom = "Browser Mic";
+  
+  // Start session on backend
+  fetch(`${httpProtocol}//${serverHost}/voice/incoming`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `CallSid=${mockSid}&From=${encodeURIComponent(mockFrom)}`
+  }).then(() => {
+    // Start active call locally
+    startActiveCall(mockSid, mockFrom);
+  });
+}
+
+function runMicLoop(sid) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert("Your browser does not support Speech Recognition. Please use Google Chrome or Microsoft Edge.");
+    return;
+  }
+  
+  if (micSpeechRecognition) {
+    try { micSpeechRecognition.stop(); } catch(e){}
+  }
+  
+  const recognition = new SpeechRecognition();
+  micSpeechRecognition = recognition;
+  
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  
+  recognition.lang = activeCall && activeCall.language ? activeCall.language : 'en-GB';
+  
+  const statusText = document.getElementById("server-status");
+  
+  recognition.onstart = () => {
+    isMicListening = true;
+    if (statusText) {
+      statusText.className = "status-indicator connected";
+      statusText.querySelector(".text").innerHTML = "<i class='fa-solid fa-microphone blink-animation text-danger'></i> Listening to Mic...";
+    }
+    console.log("Mic recording started...");
+  };
+  
+  recognition.onend = () => {
+    isMicListening = false;
+    if (statusText) {
+      statusText.className = "status-indicator connected";
+      statusText.querySelector(".text").innerText = "Processing speech...";
+    }
+  };
+  
+  recognition.onerror = (e) => {
+    console.error("Mic error:", e);
+    isMicListening = false;
+    
+    // If the error was no-speech, we wait and reopen mic if call is still active
+    if (activeCall && activeCall.sid === sid) {
+      setTimeout(() => {
+        if (activeCall && activeCall.sid === sid && !isMicListening) {
+          runMicLoop(sid);
+        }
+      }, 2000);
+    }
+  };
+  
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    console.log("Mic speech result:", transcript);
+    
+    // Add user bubble instantly on UI
+    const chatHistory = document.getElementById("call-chat-history");
+    const waitMsg = chatHistory.querySelector(".system-message");
+    if (waitMsg) waitMsg.remove();
+    
+    const userBubble = document.createElement("div");
+    userBubble.className = "bubble bubble-user";
+    userBubble.innerHTML = `<span class="speaker-tag">Customer</span> ${transcript}`;
+    chatHistory.appendChild(userBubble);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+    
+    // Send to backend
+    fetch(`${httpProtocol}//${serverHost}/voice/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(transcript)}`
+    });
+  };
+  
+  recognition.start();
 }
 
 
