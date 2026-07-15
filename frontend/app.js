@@ -216,6 +216,9 @@ function startActiveCall(sid, phone) {
   // Play ring/beep audio
   const beep = document.getElementById("sim-beep-audio");
   if (beep) beep.play().catch(e => console.log("Audio block: " + e));
+  
+  // Speak initial greeting
+  speakTextInBrowser("Welcome to Umair's Takeaway. How can I help you today?", "en-GB");
 }
 
 // Handle real-time call updates (speech speech, AI answers, cart, sentiment)
@@ -244,6 +247,9 @@ function updateActiveCall(msg) {
     
     // Auto-scroll chat panel to bottom
     chatHistory.scrollTop = chatHistory.scrollHeight;
+    
+    // Speak AI response aloud in browser
+    speakTextInBrowser(msg.transcript.ai, msg.language);
   }, 500);
   
   // Update Cart details
@@ -978,6 +984,41 @@ setInterval(async () => {
     } finally {
       isPollingActive = false;
     }
-  }
 }, 3000);
+
+// Web Speech API Voice Synthesis for Call Simulation
+function speakTextInBrowser(text, langCode) {
+  if (!window.speechSynthesis) {
+    console.warn("Speech synthesis not supported in this browser.");
+    return;
+  }
+  
+  // Cancel active speech
+  window.speechSynthesis.cancel();
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  
+  // Clean up BCP-47 tag
+  let cleanLang = langCode || 'en-GB';
+  if (cleanLang.includes('-')) {
+    const parts = cleanLang.split('-');
+    cleanLang = parts[0] + '-' + parts[1].toUpperCase();
+  }
+  utterance.lang = cleanLang;
+  
+  // Fetch available voices
+  const voices = window.speechSynthesis.getVoices();
+  
+  // Match matching language prefix
+  const matchingVoice = voices.find(v => v.lang.startsWith(cleanLang.substring(0, 2)));
+  if (matchingVoice) {
+    utterance.voice = matchingVoice;
+  }
+  
+  // Fallback speed adjustment if needed
+  utterance.rate = 1.0;
+  
+  window.speechSynthesis.speak(utterance);
+}
+
 
