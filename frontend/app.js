@@ -766,6 +766,8 @@ function setupEventListeners() {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `CallSid=${mockSid}&From=${encodeURIComponent(mockFrom)}`
     }).then(() => {
+      // Immediately set activeCall state so simulation doesn't bail out
+      startActiveCall(mockSid, mockFrom);
       // Prompt user to type dialogue turns in simulation modal
       simulateSpeechPrompt(mockSid);
     });
@@ -787,7 +789,12 @@ function simulateSpeechPrompt(sid) {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(speech)}`
-      }).then(() => {
+      }).then(async () => {
+        // Sync state immediately in polling mode
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          await syncActiveCallStatus(sid);
+        }
+        
         // Recurse unless order completed
         setTimeout(() => {
           if (activeCall) {
@@ -920,82 +927,10 @@ setInterval(async () => {
         if (callSids.length > 0) {
           const firstCallSid = callSids[0];
           const callData = activeCallsData[firstCallSid];
-          
-          if (!activeCall) {
-            // Start call
-            activeCall = {
-              sid: firstCallSid,
-              phone: callData.phone,
-              chat_history: callData.chat_history,
-              cart: callData.cart,
-              customer_info: callData.customer_info,
-              sentiment: callData.sentiment,
-              language: callData.language
-            };
-            document.getElementById("no-call-container").classList.add("hidden-element");
-            document.getElementById("active-call-container").classList.remove("hidden-element");
-            document.getElementById("call-phone-number").innerHTML = `<i class="fa-solid fa-phone"></i> ${callData.phone}`;
-            startCallTimer();
-          }
-          
-          // Check if chat history length changed before re-rendering to prevent cursor/flicker
-          const chatHistoryChanged = !activeCall.chat_history || activeCall.chat_history.length !== callData.chat_history.length;
-          activeCall.chat_history = callData.chat_history;
-          activeCall.cart = callData.cart;
-          activeCall.customer_info = callData.customer_info;
-          activeCall.sentiment = callData.sentiment;
-          activeCall.language = callData.language;
-          
-          if (chatHistoryChanged) {
-            const chatHistoryContainer = document.getElementById("call-chat-history");
-            chatHistoryContainer.innerHTML = "";
-            activeCall.chat_history.forEach(turn => {
-              const userBubble = document.createElement("div");
-              userBubble.className = "bubble bubble-user";
-              userBubble.innerHTML = `<span class="speaker-tag">Customer</span> ${turn.user}`;
-              chatHistoryContainer.appendChild(userBubble);
-              
-              const aiBubble = document.createElement("div");
-              aiBubble.className = "bubble bubble-ai";
-              aiBubble.innerHTML = `<span class="speaker-tag">AI Agent</span> ${turn.ai}`;
-              chatHistoryContainer.appendChild(aiBubble);
-            });
-            chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
-          }
-          
-          // Render cart & update headers
-          renderActiveCart();
-          
-          const sentimentBadge = document.getElementById("call-sentiment-badge");
-          sentimentBadge.className = `badge-sentiment ${activeCall.sentiment}`;
-          let emoji = "meh";
-          if (activeCall.sentiment === "happy") emoji = "smile";
-          else if (activeCall.sentiment === "impatient") emoji = "hourglass-half";
-          else if (activeCall.sentiment === "frustrated") emoji = "angry";
-          sentimentBadge.innerHTML = `<i class="fa-solid fa-${emoji}"></i> ${capitalizeFirstLetter(activeCall.sentiment)}`;
-          
-          document.getElementById("call-detected-lang").innerText = activeCall.language;
-          
+          updateCallStateFromData(firstCallSid, callData);
         } else {
-          // No active calls on backend
           if (activeCall) {
-            const finishedSid = activeCall.sid;
-            // Fetch orders to see if the call was completed as an order
-            const ordersResponse = await fetch(`${apiUrl}/orders`);
-            if (ordersResponse.ok) {
-              const latestOrders = await ordersResponse.json();
-              const matchingOrder = latestOrders.find(o => o.id === finishedSid);
-              if (matchingOrder) {
-                orders = latestOrders;
-                completeActiveCall(matchingOrder);
-              } else {
-                // Hung up without completing order
-                activeCall = null;
-                stopCallTimer();
-                document.getElementById("active-call-container").classList.add("hidden-element");
-                document.getElementById("no-call-container").classList.remove("hidden-element");
-              }
-            }
+            await handleCallCompletion(activeCall.sid);
           }
         }
       }
@@ -1004,7 +939,125 @@ setInterval(async () => {
     } finally {
       isPollingActive = false;
     }
+  }
 }, 3000);
+
+// Helper to manually sync active call state when WebSockets are unsupported
+async function syncActiveCallStatus(sid) {
+  try {
+    const response = await fetch(`${apiUrl}/active-calls`);
+    if (response.ok) {
+      const activeCallsData = await response.json();
+      if (activeCallsData[sid]) {
+        updateCallStateFromData(sid, activeCallsData[sid]);
+      } else {
+        await handleCallCompletion(sid);
+      }
+    }
+  } catch (e) {
+    console.error("Error syncing active call status:", e);
+  }
+}
+
+// Helper to update activeCall state and UI from call details
+function updateCallStateFromData(sid, callData) {
+  let initialCallSetup = false;
+  if (!activeCall) {
+    // Start call
+    activeCall = {
+      sid: sid,
+      phone: callData.phone,
+      chat_history: callData.chat_history || [],
+      cart: callData.cart || [],
+      customer_info: callData.customer_info || { name: "", address: "", type: "" },
+      sentiment: callData.sentiment || "neutral",
+      language: callData.language || "en-GB"
+    };
+    document.getElementById("no-call-container").classList.add("hidden-element");
+    document.getElementById("active-call-container").classList.remove("hidden-element");
+    document.getElementById("call-phone-number").innerHTML = `<i class="fa-solid fa-phone"></i> ${callData.phone}`;
+    startCallTimer();
+    initialCallSetup = true;
+  }
+  
+  // Check if chat history length changed before re-rendering/speaking
+  const oldHistoryLen = activeCall.chat_history ? activeCall.chat_history.length : 0;
+  const newHistoryLen = callData.chat_history ? callData.chat_history.length : 0;
+  const chatHistoryChanged = oldHistoryLen !== newHistoryLen;
+  
+  activeCall.chat_history = callData.chat_history;
+  activeCall.cart = callData.cart;
+  activeCall.customer_info = callData.customer_info;
+  activeCall.sentiment = callData.sentiment;
+  activeCall.language = callData.language;
+  
+  if (chatHistoryChanged || initialCallSetup) {
+    const chatHistoryContainer = document.getElementById("call-chat-history");
+    chatHistoryContainer.innerHTML = "";
+    activeCall.chat_history.forEach(turn => {
+      const userBubble = document.createElement("div");
+      userBubble.className = "bubble bubble-user";
+      userBubble.innerHTML = `<span class="speaker-tag">Customer</span> ${turn.user}`;
+      chatHistoryContainer.appendChild(userBubble);
+      
+      const aiBubble = document.createElement("div");
+      aiBubble.className = "bubble bubble-ai";
+      aiBubble.innerHTML = `<span class="speaker-tag">AI Agent</span> ${turn.ai}`;
+      chatHistoryContainer.appendChild(aiBubble);
+    });
+    chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+    
+    // Aloud AI voice speaking (skip on first greeting simulation to avoid double beeps, let startActiveCall handle it)
+    if (chatHistoryChanged && newHistoryLen > 0) {
+      const lastTurn = activeCall.chat_history[newHistoryLen - 1];
+      speakTextInBrowser(lastTurn.ai, activeCall.language, () => {
+        if (activeCall && activeCall.sid.startsWith("mic_")) {
+          runMicLoop(activeCall.sid);
+        }
+      });
+    }
+  }
+  
+  // Render cart
+  renderActiveCart();
+  
+  const sentimentBadge = document.getElementById("call-sentiment-badge");
+  sentimentBadge.className = `badge-sentiment ${activeCall.sentiment}`;
+  let emoji = "meh";
+  if (activeCall.sentiment === "happy") emoji = "smile";
+  else if (activeCall.sentiment === "impatient") emoji = "hourglass-half";
+  else if (activeCall.sentiment === "frustrated") emoji = "angry";
+  sentimentBadge.innerHTML = `<i class="fa-solid fa-${emoji}"></i> ${capitalizeFirstLetter(activeCall.sentiment)}`;
+  
+  document.getElementById("call-detected-lang").innerText = activeCall.language;
+}
+
+// Helper to complete or terminate active call
+async function handleCallCompletion(sid) {
+  if (activeCall && activeCall.sid === sid) {
+    // Fetch orders to see if the call was completed as an order
+    try {
+      const ordersResponse = await fetch(`${apiUrl}/orders`);
+      if (ordersResponse.ok) {
+        const latestOrders = await ordersResponse.json();
+        const matchingOrder = latestOrders.find(o => o.id === sid);
+        if (matchingOrder) {
+          orders = latestOrders;
+          completeActiveCall(matchingOrder);
+          return;
+        }
+      }
+    } catch(e) {
+      console.error("Error fetching orders during call completion:", e);
+    }
+    
+    // Hung up without completing order
+    activeCall = null;
+    stopCallTimer();
+    document.getElementById("active-call-container").classList.add("hidden-element");
+    document.getElementById("no-call-container").classList.remove("hidden-element");
+  }
+}
 
 // Web Speech API Voice Synthesis for Call Simulation
 function speakTextInBrowser(text, langCode, onEndCallback) {
@@ -1135,6 +1188,11 @@ function runMicLoop(sid) {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(transcript)}`
+    }).then(async () => {
+      // Sync state immediately in polling mode
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        await syncActiveCallStatus(sid);
+      }
     });
   };
   
