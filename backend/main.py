@@ -25,7 +25,12 @@ app.add_middleware(
 )
 
 # Paths for files
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+REPO_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+if os.environ.get("VERCEL"):
+    DATA_DIR = "/tmp"
+else:
+    DATA_DIR = REPO_DATA_DIR
+
 MENU_FILE = os.path.join(DATA_DIR, "menu.json")
 ORDERS_FILE = os.path.join(DATA_DIR, "orders.json")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
@@ -50,10 +55,29 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # Helper function to read/write files
 def read_json_file(file_path: str, default_value: Any) -> Any:
+    # If the file does not exist, check if we can copy it from the repo directory (relevant for Vercel /tmp)
     if not os.path.exists(file_path):
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(default_value, f, indent=2)
+        file_name = os.path.basename(file_path)
+        repo_file_path = os.path.join(REPO_DATA_DIR, file_name)
+        if os.path.exists(repo_file_path):
+            try:
+                with open(repo_file_path, "r", encoding="utf-8") as rf:
+                    data = json.load(rf)
+                # Copy/Cache it in DATA_DIR
+                with open(file_path, "w", encoding="utf-8") as wf:
+                    json.dump(data, wf, indent=2)
+                return data
+            except Exception as e:
+                logger.error(f"Error copying {file_name} from repo to writable path: {e}")
+        
+        # Fallback: create new file with default_value
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(default_value, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error writing default value to {file_path}: {e}")
         return default_value
+        
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -340,11 +364,45 @@ async def respond_call(request: Request):
     # Fetch call state early
     call_state = active_calls.get(call_sid)
     if not call_state:
-        # If session timed out or server restarted
-        response = VoiceResponse()
-        response.say("I am sorry, our systems are restarting. Please call us again.", voice="Polly.Amy", language="en-GB")
-        response.hangup()
-        return Response(content=str(response), media_type="application/xml")
+        # Check if client passed the current state to rebuild session (stateless / serverless fallback)
+        chat_history_str = form_data.get("ChatHistory", "")
+        chat_history = []
+        if chat_history_str:
+            try:
+                chat_history = json.loads(chat_history_str)
+            except Exception as e:
+                logger.error(f"Error parsing ChatHistory: {e}")
+                
+        cart_str = form_data.get("Cart", "")
+        cart = []
+        if cart_str:
+            try:
+                cart = json.loads(cart_str)
+            except:
+                pass
+                
+        cust_info_str = form_data.get("CustomerInfo", "")
+        cust_info = {"name": "", "address": "", "phone": "Unknown Customer", "type": ""}
+        if cust_info_str:
+            try:
+                cust_info = json.loads(cust_info_str)
+            except:
+                pass
+                
+        lang = form_data.get("Language", "en-GB")
+        
+        # Reconstruct active call state
+        call_state = {
+            "sid": call_sid,
+            "phone": cust_info.get("phone", "Unknown Customer"),
+            "chat_history": chat_history,
+            "cart": cart,
+            "customer_info": cust_info,
+            "language": lang,
+            "status": "active",
+            "sentiment": "neutral"
+        }
+        active_calls[call_sid] = call_state
         
     current_lang = call_state.get("language", "en-GB")
     

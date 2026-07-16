@@ -785,10 +785,20 @@ function simulateSpeechPrompt(sid) {
     if (!activeCall) return;
     const speech = prompt("Customer speech (type what the customer says to BiteAI):\ne.g. 'I want a Margherita Pizza and a Cheeseburger, for collection please. My name is John.'");
     if (speech) {
+      const bodyParams = new URLSearchParams();
+      bodyParams.append("CallSid", sid);
+      bodyParams.append("SpeechResult", speech);
+      if (activeCall) {
+        bodyParams.append("ChatHistory", JSON.stringify(activeCall.chat_history || []));
+        bodyParams.append("Cart", JSON.stringify(activeCall.cart || []));
+        bodyParams.append("CustomerInfo", JSON.stringify(activeCall.customer_info || {}));
+        bodyParams.append("Language", activeCall.language || "en-GB");
+      }
+
       fetch(`${httpProtocol}//${serverHost}/voice/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(speech)}`
+        body: bodyParams.toString()
       }).then(async () => {
         // Sync state immediately in polling mode
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -1183,11 +1193,21 @@ function runMicLoop(sid) {
     chatHistory.appendChild(userBubble);
     chatHistory.scrollTop = chatHistory.scrollHeight;
     
+    const bodyParams = new URLSearchParams();
+    bodyParams.append("CallSid", sid);
+    bodyParams.append("SpeechResult", transcript);
+    if (activeCall) {
+      bodyParams.append("ChatHistory", JSON.stringify(activeCall.chat_history || []));
+      bodyParams.append("Cart", JSON.stringify(activeCall.cart || []));
+      bodyParams.append("CustomerInfo", JSON.stringify(activeCall.customer_info || {}));
+      bodyParams.append("Language", activeCall.language || "en-GB");
+    }
+
     // Send to backend
     fetch(`${httpProtocol}//${serverHost}/voice/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `CallSid=${sid}&SpeechResult=${encodeURIComponent(transcript)}`
+      body: bodyParams.toString()
     }).then(async () => {
       // Sync state immediately in polling mode
       if (!ws || ws.readyState !== WebSocket.OPEN) {
